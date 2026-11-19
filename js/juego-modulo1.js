@@ -3,14 +3,24 @@
       'use strict';
       const el = id => document.getElementById(id);
       const filterGroup=el('m1-filter-group'),filterSearch=el('m1-filter-search'),filterCount=el('m1-filter-count');
-      const glossaryRows=[...document.querySelectorAll('.m1-glossary-row')];
       function normalize(text){return text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
+      function normalizeMath(text){
+        return normalize(text).replace(/\s+/g,'').replace(/[−–—]/g,'-')
+          .replace(/[×·]/g,'*').replace(/÷/g,'/').replace(/²/g,'^2');
+      }
+      const glossaryRows=[...document.querySelectorAll('.m1-glossary-row')].map(row=>({
+        row,
+        text:normalize(row.textContent),
+        expression:normalizeMath(row.querySelector('.m1-math').textContent)
+      }));
       function updateGlossary(){
         const category=filterGroup.value;
         const search=normalize(filterSearch.value.trim());
+        const searchExpression=normalizeMath(search);
         let visible=0;
-        glossaryRows.forEach(row=>{
-          const match=(category==='Todas'||row.dataset.group===category)&&(!search||normalize(row.textContent).includes(search));
+        glossaryRows.forEach(({row,text,expression})=>{
+          const match=(category==='Todas'||row.dataset.group===category)&&
+            (!search||text.includes(search)||expression.includes(searchExpression));
           row.hidden=!match;
           if(match) visible++;
         });
@@ -36,13 +46,13 @@
         ],
         reverse:[
           {q:'2x + 7',opts:['Dos cajas con x lápices cada una y siete lápices sueltos.','Dos cajas con siete lápices cada una y x lápices sueltos.','Siete cajas con x lápices cada una y dos lápices sueltos.','Dos cajas con x + 7 lápices cada una.'],correct:0,hint:'La expresión 2x representa dos grupos de x; el + 7 va aparte.',why:'Dos cajas de x lápices suman 2x, y siete sueltos hacen 2x + 7.'},
-          {q:'x − 4',opts:['Ten pesos repartidos entre x personas.','Tienes x pesos y gastas cuatro.','Tienes cuatro pesos y gastas x.','Compras cuatro objetos de x pesos.'],correct:1,hint:'La cantidad inicial es x; se le quitan cuatro.',why:'Si empiezas con x pesos y gastas 4, te quedan x − 4.'},
+          {q:'x − 4',opts:['Repartes diez pesos entre x personas.','Tienes x pesos y gastas cuatro.','Tienes cuatro pesos y gastas x.','Compras cuatro objetos de x pesos.'],correct:1,hint:'La cantidad inicial es x. Réstale cuatro.',why:'Si empiezas con x pesos y gastas 4, te quedan x − 4.'},
           {q:'5(x + 3)',opts:['Cinco bolsas con x dulces y tres dulces extra en total.','Tres bolsas con x + 5 dulces cada una.','Cinco bolsas con x + 3 dulces en cada bolsa.','Una bolsa con cinco dulces y x + 3 bolsas adicionales.'],correct:2,hint:'Los paréntesis indican que cada uno de los cinco grupos tiene x + 3.',why:'Cinco bolsas de (x + 3) dulces representan 5(x + 3).'},
           {q:'4x',opts:['Un boleto de x pesos más cuatro pesos de comisión.','Cuatro boletos de x pesos cada uno.','Un boleto cuesta cuatro pesos menos que x.','Cuatro amigos reparten x pesos entre todos.'],correct:1,hint:'4x indica cuatro grupos de tamaño x.',why:'Cuatro boletos a x pesos cada uno cuestan 4x pesos.'},
           {q:'12 − x',opts:['Tienes x canicas y pierdes doce.','Tienes doce canicas y te regalan x.','Tienes doce canicas y pierdes x.','Tienes x docenas de canicas.'],correct:2,hint:'El número 12 es la cantidad inicial.',why:'Comenzamos con 12 canicas y quitamos x; quedan 12 − x.'},
           {q:'x / 3',opts:['Tres personas reciben x pesos cada una.','Repartes x pesos por igual entre tres personas.','Guardas tres pesos y luego sumas x.','Repartes tres pesos entre x personas.'],correct:1,hint:'El denominador 3 es el número de partes iguales.',why:'Al dividir x pesos entre tres personas, cada una recibe x / 3.'},
           {q:'2(x − 5)',opts:['Dos amigos tienen x monedas en total y gastan cinco.','Una persona tiene dos veces x monedas y gasta cinco.','Dos personas tienen x monedas cada una y cada una gasta cinco.','Cinco personas tienen x − 2 monedas cada una.'],correct:2,hint:'Los paréntesis significan que a cada grupo se le quitan cinco.',why:'Cada persona conserva x − 5 monedas. Entre las dos son 2(x − 5).'},
-          {q:'x + y',opts:['Un equipo tiene x puntos y otro y puntos; se suman.','Un equipo tiene x puntos y pierde y.','Un equipo multiplica sus x puntos por y.','Un equipo reparte x puntos entre y jugadores.'],correct:0,hint:'Hay dos cantidades distintas que se suman.',why:'Sumar x puntos más y puntos se escribe x + y.'},
+          {q:'x + y',opts:['Un equipo tiene x puntos y el otro tiene y puntos. Se suman los puntos de ambos equipos.','Un equipo tiene x puntos y pierde y.','Un equipo multiplica sus x puntos por y.','Un equipo reparte x puntos entre y jugadores.'],correct:0,hint:'Las dos letras representan las cantidades que se suman.',why:'Sumar x puntos más y puntos se escribe x + y.'},
           {q:'(x + 8) / 2',opts:['Repartes x dulces entre dos amigos y agregas ocho a cada uno.','Juntas x dulces y ocho adicionales; después repartes todo entre dos.','Compras dos paquetes con x + 8 dulces cada uno.','Repartes ocho dulces entre x amigos y agregas dos.'],correct:1,hint:'Primero suma x + 8, luego divide ese total entre dos.',why:'La cantidad completa es x + 8; al repartirla en dos partes iguales queda (x + 8) / 2.'},
           {q:'x²',opts:['El perímetro de un cuadrado cuyo lado mide x.','El área de un rectángulo con lados x y 2.','El área de un cuadrado cuyo lado mide x.','La longitud de dos segmentos de x unidades.'],correct:2,hint:'El área de un cuadrado es lado por lado.',why:'Un cuadrado de lado x tiene área x × x = x².'}
         ]

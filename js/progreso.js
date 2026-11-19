@@ -10,10 +10,7 @@
   const portada = document.getElementById('dd-continue-home');
   const panel = document.getElementById('dd-continue-progress');
 
-  function leer(key) {
-    try { return JSON.parse(localStorage.getItem(key)); }
-    catch { return null; }
-  }
+  const {leer, borrarTodo} = window.DespejandoProgreso;
 
   function tieneRespuesta(a) {
     if (a && typeof a === 'object') return Object.values(a).some(tieneRespuesta);
@@ -25,7 +22,15 @@
       const draft = leer(paso.key)?.draft;
       if (!Array.isArray(draft?.answers) || draft.answers.length !== paso.total ||
           !Number.isInteger(draft.position) || draft.position < 0 || draft.position >= paso.total) return [];
-      const respondidas = draft.answers.filter(tieneRespuesta).length;
+      let respondidas = draft.answers.filter(tieneRespuesta).length;
+      if (paso.ruta === 'modulo2') {
+        respondidas = Number.isInteger(draft.respondidas) && draft.respondidas >= 0 && draft.respondidas <= paso.total
+          ? draft.respondidas
+          : draft.answers.filter((respuesta, index) => {
+            if (index < 6) return tieneRespuesta(respuesta);
+            return tieneRespuesta(respuesta?.eq) && tieneRespuesta(respuesta?.x);
+          }).length;
+      }
       return [{...paso, respondidas, position: draft.position, fecha: Number(draft.updatedAt) || 0}];
     }).sort((a, b) => b.fecha - a.fecha);
   }
@@ -88,7 +93,7 @@
     const ask = '¿Seguro que quieres reiniciar todo tu progreso?\n\nSe borrarán los resultados y borradores. Se conservará el estilo visual.\n\nNo se puede deshacer.';
     if (!window.confirm(ask)) return;
     try {
-      pasos.forEach(paso => localStorage.removeItem(paso.key));
+      borrarTodo(pasos.map(paso => paso.key));
       window.location.reload();
     } catch {
       message.textContent = 'No se pudo acceder al almacenamiento de este navegador. Revisa que permita guardar datos locales.';

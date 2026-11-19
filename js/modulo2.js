@@ -2,79 +2,55 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const approx = (a,b) => Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<1e-7*Math.max(1,Math.abs(a),Math.abs(b));
-  const nfmt = n => {
-    let v=Math.round((Math.abs(n)<1e-9?0:n)*10000)/10000;
-    return String(v).replace(/\.0+$/,'');
-  };
-  const mfmt = (a,b) => {
-    a=approx(a,0)?0:a;b=approx(b,0)?0:b;
-    if(!a) return nfmt(b);
-    const x=approx(a,1)?'x':approx(a,-1)?'−x':nfmt(a)+'x';
-    return x+(b>0?' + '+nfmt(b):b<0?' − '+nfmt(-b):'');
-  };
-  const linear = (a,b) => ({a,b});
+  const {miembrosLineales: eqModelMatch, sustituirEnEcuacionLineal, fracciones} = window.DespejandoAlgebra;
+  const nfmt = value => String(value);
+  const sinPrefijoX = value => String(value ?? '').trim().replace(/^x\s*=\s*/i, '');
+  const iguales = ([a, b], [c, d]) => a === c && b === d;
+  const esEntero = ([n, d], entero) => n === entero && d === 1n;
+  const valorAbsoluto = ([n, d]) => [n < 0n ? -n : n, d];
+  const superaLimite = ([n, d], limite) => n < -limite * d || n > limite * d;
 
-  /* Analizador propio y seguro: sin eval, Function ni código ejecutado del estudiante. */
-  function parseLinear(src) {
-    const s=String(src||'').trim().toLowerCase().replace(/[−–—]/g,'-').replace(/[×·]/g,'*').replace(/÷/g,'/').replace(/,/g,'.').replace(/\s+/g,'');
-    if(!s||s.length>95||!/^[\dx.+*\/()\-]+$/.test(s)) throw Error('Usa x, números, +, −, *, / y paréntesis.');
-    const raw=[];
-    for(let i=0;i<s.length;){
-      const n=s.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)/);
-      if(n){raw.push({k:'num',v:Number(n[0])});i+=n[0].length;}
-      else if(s[i]==='x'){raw.push({k:'var'});i++;}
-      else if('+-*/()'.includes(s[i])){raw.push({k:s[i]});i++;}
-      else throw Error('Hay un símbolo desconocido.');
+  function leerNumero(input) {
+    try {
+      const partes = String(input ?? '').trim().replace(/[−–—]/g, '-').replace(/,/g, '.').split('/');
+      if (!partes[0] || partes.length > 2) return null;
+      const a = fracciones.leerDecimal(partes[0].trim());
+      return partes.length === 1 ? a : fracciones.dividir(a, fracciones.leerDecimal(partes[1].trim()));
+    } catch (error) {
+      return null;
     }
-    const ts=[];
-    raw.forEach((r,i)=>{
-      const last=raw[i-1];
-      if(last && ['num','var',')'].includes(last.k) && ['var','('].includes(r.k))ts.push({k:'*'});
-      ts.push(r);
-    });
-    let pos=0;
-    const is=k=>ts[pos]?.k===k;
-    function prim(){
-      if(is('num')){const value=ts[pos++].v;return ()=>value;}
-      if(is('var')){pos++;return x=>x;}
-      if(is('(')){pos++;const f=add();if(!is(')'))throw Error('Falta cerrar un paréntesis.');pos++;return f;}
-      throw Error('Revisa números y paréntesis.');
-    }
-    function unary(){
-      if(is('+')){pos++;return unary();}
-      if(is('-')){pos++;const f=unary();return x=>-f(x);}
-      return prim();
-    }
-    function mul(){let f=unary();while(is('*')||is('/')){const k=ts[pos++].k,l=f,r=unary();f=x=>k==='*'?l(x)*r(x):l(x)/r(x);}return f;}
-    function add(){let f=mul();while(is('+')||is('-')){const k=ts[pos++].k,l=f,r=mul();f=x=>k==='+'?l(x)+r(x):l(x)-r(x);}return f;}
-    const fn=add();if(pos!==ts.length)throw Error('Revisa cómo escribiste la expresión.');
-    // No permitir ecuaciones no lineales o valores indefinidos.
-    const samples=[-3,-1,0,1,2,6].map(fn);
-    if(samples.some(x=>!Number.isFinite(x)))throw Error('No se puede dividir entre cero.');
-    const a=fn(1)-fn(0),b=fn(0);
-    if(samples.some((v,i)=>!approx(v,a*[-3,-1,0,1,2,6][i]+b)))throw Error('Este ejercicio pide una expresión lineal.');
-    return linear(a,b);
-  }
-  function parseEquation(raw){
-    const parts=String(raw||'').split('=');
-    if(parts.length!==2)throw Error('Escribe una ecuación con un solo signo =.');
-    return [parseLinear(parts[0]),parseLinear(parts[1])];
-  }
-  function eqModelMatch(given,expected){
-    try{
-      const [a,b]=parseEquation(given),[c,d]=parseEquation(expected);
-      const same=(u,v)=>approx(u.a,v.a)&&approx(u.b,v.b);
-      return (same(a,c)&&same(b,d))||(same(a,d)&&same(b,c));
-    }catch(e){return false;}
-  }
-  function solutionMatch(input,expected){
-    const s=String(input||'').trim().replace(/,/g,'.').replace(/^x\s*=\s*/i,'');
-    if(!s || !/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s))return false;
-    return approx(Number(s),expected);
   }
 
-  /* V7: laboratorio guiado, transformaciones exactas y desafíos con x en ambos lados. */
+  const fraccionDeNumero = numero => fracciones.leerDecimal(String(numero));
+  const coincideNumero = (value, expected) => value !== null && iguales(value, fraccionDeNumero(expected));
+  const solutionMatch = (input, expected) => coincideNumero(leerNumero(sinPrefijoX(input)), expected);
+
+  function fmtFraccion([n, d]) {
+    const signo = n < 0n ? '−' : '';
+    const magnitud = n < 0n ? -n : n;
+    return signo + (d === 1n ? String(magnitud) : magnitud + '/' + d);
+  }
+
+  function fmtTerminoX([n, d]) {
+    const signo = n < 0n ? '−' : '';
+    const magnitud = n < 0n ? -n : n;
+    return signo + (magnitud === 1n ? '' : String(magnitud)) + 'x' + (d === 1n ? '' : '/' + d);
+  }
+
+  function fmtMiembro({a, b}) {
+    if (a[0] === 0n) return fmtFraccion(b);
+    const constante = b[0] < 0n ? ' − ' + fmtFraccion(valorAbsoluto(b)) :
+      b[0] > 0n ? ' + ' + fmtFraccion(b) : '';
+    return fmtTerminoX(a) + constante;
+  }
+
+  const operaciones = {
+    '+': 'sumar', '-': 'restar', '+x': 'sumar', '-x': 'restar',
+    '*': 'multiplicar por', '/': 'dividir entre'
+  };
+  const fmtOperacion = (op, valor) => operaciones[op] + ' ' +
+    (op.endsWith('x') ? fmtTerminoX(valor) : fmtFraccion(valor));
+
   const simLevels={
     inicial:[
       {a:1,b:3,c:0,d:8,goal:1,story:'Una cantidad desconocida más 3 es igual a 8. Encuentra esa cantidad.'},
@@ -101,83 +77,135 @@
   };
   let simLevel='inicial',simIndex=0,L=null,R=null,log=[],undo=[],cleared={inicial:new Set(),intermedio:new Set(),experto:new Set()};
   const currentSim=()=>simLevels[simLevel][simIndex];
-  function solved(){return (approx(L.a,1)&&approx(L.b,0)&&approx(R.a,0))||(approx(R.a,1)&&approx(R.b,0)&&approx(L.a,0));}
-  function tiles(container,a,b){
+  function solved() {
+    return (esEntero(L.a, 1n) && esEntero(L.b, 0n) && esEntero(R.a, 0n)) ||
+      (esEntero(R.a, 1n) && esEntero(R.b, 0n) && esEntero(L.a, 0n));
+  }
+  function tiles(container, a, b) {
     container.replaceChildren();
-    const add=(t,k)=>{const n=document.createElement('span');n.className='m2-tile'+(k?' '+k:'');n.textContent=t;container.append(n);};
-    if(!approx(a,0))add(approx(a,1)?'x':approx(a,-1)?'−x':nfmt(a)+'x','m2-tile-x');
-    if(!approx(b,0)||approx(a,0))add((a&&!approx(a,0)&&b>0?'+':'')+nfmt(b),b<0?'m2-tile-negative':'');
+    const add = (text, kind) => {
+      const tile = document.createElement('span');
+      tile.className = 'm2-tile' + (kind ? ' ' + kind : '');
+      tile.textContent = text;
+      container.append(tile);
+    };
+    if (a[0] !== 0n) add(fmtTerminoX(a), 'm2-tile-x');
+    if (b[0] !== 0n || a[0] === 0n) {
+      add((a[0] !== 0n && b[0] > 0n ? '+' : '') + fmtFraccion(b), b[0] < 0n ? 'm2-tile-negative' : '');
+    }
   }
-  function transform(f,op,v){
-    if(op==='+')return linear(f.a,f.b+v);
-    if(op==='-')return linear(f.a,f.b-v);
-    if(op==='+x')return linear(f.a+v,f.b);
-    if(op==='-x')return linear(f.a-v,f.b);
-    if(op==='*')return linear(f.a*v,f.b*v);
-    return linear(f.a/v,f.b/v);
+  function transform({a,b}, op, valor) {
+    switch (op) {
+      case '+': return {a, b: fracciones.sumar(b, valor)};
+      case '-': return {a, b: fracciones.restar(b, valor)};
+      case '+x': return {a: fracciones.sumar(a, valor), b};
+      case '-x': return {a: fracciones.restar(a, valor), b};
+      case '*': return {a: fracciones.multiplicar(a, valor), b: fracciones.multiplicar(b, valor)};
+      case '/': return {a: fracciones.dividir(a, valor), b: fracciones.dividir(b, valor)};
+    }
   }
-  function simInput(){const raw=$('m2-amount').value.trim();return {raw,v:Number(raw),op:$('m2-op').value};}
-  function simPreview(){
-    if(!L||!R)return;
-    const {raw,v,op}=simInput();const el=$('m2-sim-preview');
-    if(!op || !raw){el.textContent='Primero elige una operación y escribe una cantidad. La respuesta no se mostrará por adelantado.';return;}
-    if(!Number.isFinite(v)||Math.abs(v)>10000||((op==='/'||op==='*')&&approx(v,0))){el.textContent='Introduce una cantidad válida. No puedes dividir ni multiplicar por cero.';return;}
-    const action={'+':'sumar','-':'restar','+x':'sumar','-x':'restar','*':'multiplicar por','/':'dividir entre'}[op];
-    el.textContent='Vas a '+action+' '+nfmt(v)+(op.endsWith('x')?'x':'')+' en ambos miembros. Pulsa «Aplicar» para observar el resultado de tu decisión.';
+  function simInput() {
+    const raw = $('m2-amount').value.trim();
+    return {raw, valor: leerNumero(raw), op: $('m2-op').value};
+  }
+  function problemaOperacion(valor, op) {
+    if (!valor || superaLimite(valor, 10000n)) return 'Escribe un número entre −10 000 y 10 000. Puedes usar una fracción, como 1/3.';
+    if (valor[0] !== 0n) return '';
+    if (op === '/') return 'No se puede dividir entre cero.';
+    if (op === '*') return 'Multiplicar ambos lados por cero borra la información de la ecuación.';
+    return 'Sumar o restar cero deja la ecuación igual. Prueba con otro valor.';
+  }
+  function simPreview() {
+    const {raw, valor, op} = simInput();
+    const el = $('m2-sim-preview');
+    if (!op || !raw) {
+      el.textContent = 'Elige una operación y escribe una cantidad para ver qué se aplicará a ambos miembros.';
+      return;
+    }
+    el.textContent = problemaOperacion(valor, op) ||
+      'Vas a ' + fmtOperacion(op, valor) + ' en ambos miembros. Pulsa «Aplicar» para ver cómo cambia la ecuación.';
   }
   function renderSim(message){
     const c=currentSim(),win=solved(),moves=log.length-1;
     $('m2-sim-level').textContent='Reto '+(simIndex+1)+' de '+simLevels[simLevel].length+' · '+({inicial:'Nivel inicial',intermedio:'Nivel intermedio',experto:'Nivel experto'}[simLevel]);
     $('m2-sim-context').textContent=c.story;
-    $('m2-sim-equation').textContent=mfmt(L.a,L.b)+' = '+mfmt(R.a,R.b);
+    $('m2-sim-equation').textContent=fmtMiembro(L)+' = '+fmtMiembro(R);
     tiles($('m2-sim-left'),L.a,L.b);tiles($('m2-sim-right'),R.a,R.b);
     $('m2-sim-status').textContent=win?'✓ x despejada':'⚖ Igualdad conservada';
     $('m2-sim-moves').textContent='Movimientos: '+moves;
     $('m2-sim-target').textContent='Meta sugerida: '+c.goal+' movimientos';
     $('m2-sim-cleared').textContent='Completados: '+cleared[simLevel].size+' / '+simLevels[simLevel].length;
     if(win){cleared[simLevel].add(simIndex);$('m2-sim-cleared').textContent='Completados: '+cleared[simLevel].size+' / '+simLevels[simLevel].length;}
-    $('m2-sim-feedback').textContent=message||(win?'¡Despejaste x!':'Selecciona una operación. La vista previa te mostrará cómo quedaría la ecuación.');
+    $('m2-sim-feedback').textContent=message||(win?'¡Despejaste x!':'Aplica la operación para ver cómo cambia la ecuación.');
     const list=$('m2-sim-history');list.replaceChildren();log.forEach(s=>{const li=document.createElement('li');li.textContent=s;list.append(li);});
     $('m2-apply').disabled=win;$('m2-op').disabled=win;$('m2-amount').disabled=win;
     $('m2-undo').disabled=undo.length===0;
     document.querySelectorAll('[data-m2-sim-level]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m2SimLevel===simLevel)));
-    if(win){const x=approx(L.a,1)?R.b:L.b;
-      $('m2-sim-feedback').textContent='¡Bien! x = '+nfmt(x)+'. Lo lograste en '+moves+' movimiento(s). '+(moves<=c.goal?'¡Alcanzaste la meta sugerida!':'¿Puedes encontrar un camino más corto? Prueba reiniciando.');
+    if(win){const x = esEntero(L.a, 1n) ? R.b : L.b;
+      $('m2-sim-feedback').textContent='¡Bien! x = '+fmtFraccion(x)+'. Lo lograste en '+moves+' movimiento(s). '+(moves<=c.goal?'¡Alcanzaste la meta sugerida!':'¿Puedes encontrar un camino más corto? Prueba reiniciando.');
     }
     simPreview();
   }
-  function resetSim(){const c=currentSim();L=linear(c.a,c.b);R=linear(c.c,c.d);log=['Inicio: '+mfmt(L.a,L.b)+' = '+mfmt(R.a,R.b)+'.'];undo=[];
-    $('m2-op').disabled=false;$('m2-amount').disabled=false;
-    $('m2-op').value='';
-    $('m2-amount').value='';
+  function resetSim() {
+    const c = currentSim();
+    L = {a: fraccionDeNumero(c.a), b: fraccionDeNumero(c.b)};
+    R = {a: fraccionDeNumero(c.c), b: fraccionDeNumero(c.d)};
+    log = ['Inicio: ' + fmtMiembro(L) + ' = ' + fmtMiembro(R) + '.'];
+    undo = [];
+    $('m2-op').value = '';
+    $('m2-amount').value = '';
     renderSim('Desafío: encuentra x conservando la igualdad. La meta de movimientos es orientativa.');
   }
-  $('m2-apply').addEventListener('click',()=>{
-    const {raw,v,op}=simInput();
-    if(!op){renderSim('Primero selecciona una operación para ambos miembros.');return;}
-    if(!raw||!Number.isFinite(v)||Math.abs(v)>10000){renderSim('Introduce una cantidad válida entre −10 000 y 10 000.');return;}
-    if((op==='/'||op==='*')&&approx(v,0)){renderSim('No dividas ni multipliques por cero: se perdería información sobre x.');return;}
-    if(approx(v,0)){renderSim('Esa operación no cambia la ecuación. Prueba con un valor distinto de cero.');return;}
-    const nL=transform(L,op,v),nR=transform(R,op,v);
-    if([nL.a,nL.b,nR.a,nR.b].some(z=>!Number.isFinite(z)||Math.abs(z)>1e7)){renderSim('Las cantidades resultantes son demasiado grandes. Prueba otra operación.');return;}
-    // Evitar igualdad sin x por cancelación accidental de la incógnita.
-    if(approx(nL.a-nR.a,0)){renderSim('Esa operación eliminaría la incógnita de ambos miembros. Elige otra que conserve una ecuación resoluble.');return;}
-    undo.push({L:{...L},R:{...R},log:log.slice()});L=nL;R=nR;
-    const word={'+':'Sumar','-':'Restar','+x':'Sumar','-x':'Restar','*':'Multiplicar por','/':'Dividir entre'}[op];
-    const suffix=op.endsWith('x')?'x':'';
-    log.push(word+' '+nfmt(v)+suffix+' en ambos lados → '+mfmt(L.a,L.b)+' = '+mfmt(R.a,R.b)+'.');
-    renderSim(solved()?'¡Conseguiste aislar la incógnita!':'La ecuación sigue siendo equivalente. Elige el siguiente movimiento.');
-  });
-  $('m2-hint').addEventListener('click',()=>{
-    let hint='';
-    if(!approx(L.a,0)&&!approx(R.a,0)){hint='Hay x en ambos miembros. Prueba restar '+nfmt(R.a)+'x de ambos lados (o restar '+nfmt(L.a)+'x para despejar por la derecha).';}
-    else {const side=!approx(L.a,0)?L:R;
-      if(!approx(side.b,0))hint='Elimina el término constante: '+(side.b>0?'resta ':'suma ')+nfmt(Math.abs(side.b))+' en ambos lados.';
-      else if(!approx(Math.abs(side.a),1))hint='Ahora divide ambos miembros entre '+nfmt(side.a)+' para que quede x.';
-      else if(approx(side.a,-1))hint='Multiplica ambos miembros por −1 para obtener x.';
-      else hint='Revisa en qué miembro aparece la incógnita y si ya está aislada.';
+  $('m2-apply').addEventListener('click', () => {
+    const {valor, op} = simInput();
+    if (!op) {
+      renderSim('Primero selecciona una operación para ambos miembros.');
+      return;
     }
-    renderSim('💡 '+hint);
+    const problema = problemaOperacion(valor, op);
+    if (problema) {
+      renderSim(problema);
+      return;
+    }
+    let nuevoL, nuevoR;
+    try {
+      nuevoL = transform(L, op, valor);
+      nuevoR = transform(R, op, valor);
+    } catch (error) {
+      renderSim('Las fracciones resultantes son demasiado largas. Prueba otra operación.');
+      return;
+    }
+    if ([nuevoL.a, nuevoL.b, nuevoR.a, nuevoR.b].some(z => superaLimite(z, 10000000n))) {
+      renderSim('Las cantidades resultantes son demasiado grandes. Prueba otra operación.');
+      return;
+    }
+    undo.push({L, R, log: log.slice()});
+    L = nuevoL;
+    R = nuevoR;
+    const accion = fmtOperacion(op, valor);
+    log.push(accion[0].toUpperCase() + accion.slice(1) + ' en ambos lados → ' +
+      fmtMiembro(L) + ' = ' + fmtMiembro(R) + '.');
+    renderSim('La ecuación sigue siendo equivalente. Elige el siguiente movimiento.');
+  });
+  $('m2-hint').addEventListener('click', () => {
+    let hint;
+    if ([L.a, L.b, R.a, R.b].some(number => superaLimite(number, 10000n))) {
+      hint = 'Prueba dividir ambos miembros entre 10 para trabajar con números menores.';
+    } else if (L.a[0] !== 0n && R.a[0] !== 0n) {
+      hint = 'Hay x en ambos miembros. Prueba ' + fmtOperacion('-x', R.a) +
+        ' de ambos lados o ' + fmtOperacion('-x', L.a) + ' para despejar por la derecha.';
+    } else {
+      const side = L.a[0] !== 0n ? L : R;
+      if (side.b[0] !== 0n) {
+        const accion = side.b[0] > 0n ? '-' : '+';
+        hint = 'Para eliminar el término constante, prueba ' + fmtOperacion(accion, valorAbsoluto(side.b)) + ' en ambos lados.';
+      } else if (!esEntero(side.a, 1n)) {
+        hint = 'Divide ambos miembros entre ' + fmtFraccion(side.a) + ' para que quede x.';
+      } else {
+        hint = 'Revisa en qué lado quedó la incógnita.';
+      }
+    }
+    renderSim('💡 ' + hint);
   });
   $('m2-undo').addEventListener('click',()=>{const last=undo.pop();if(!last)return;L=last.L;R=last.R;log=last.log;renderSim('Has deshecho el último movimiento. Puedes probar otra estrategia.');});
   $('m2-reset').addEventListener('click',resetSim);
@@ -215,9 +243,9 @@
     intermedio:[
       {q:'Tres entradas iguales y $25 de servicio cuestan $145. ¿Cuál es el precio de una entrada?',eq:'3x+25=145',x:40,meaning:'Precio de cada entrada (pesos)',wrong:['Servicio de compra','Cantidad de entradas'],hint:'El servicio se paga una sola vez.',why:'3x + 25 = 145 → 3x = 120 → x = 40 pesos.',tag:'EVENTOS'},
       {q:'Una promoción permite pagar la mitad del precio de un curso más $17 de inscripción. En total pagas $47. ¿Cuál era el precio completo del curso?',eq:'x/2+17=47',x:60,meaning:'Precio original del curso (pesos)',wrong:['Costo de inscripción','Pago final de la promoción'],hint:'El descuento significa x/2, no 2x.',why:'x/2 + 17 = 47 → x/2 = 30 → x = 60 pesos.',tag:'CURSOS'},
-      {q:'Cuatro paquetes idénticos contienen x dulces y 3 caramelos extra cada uno. En total hay 92 piezas. ¿Cuántos dulces x contiene cada paquete?',eq:'4(x+3)=92',x:20,meaning:'Dulces sin extras en cada paquete',wrong:['Número de paquetes','Total de piezas'],hint:'Cada paquete contiene x+3, y hay cuatro paquetes.',why:'4(x + 3) = 92 → x + 3 = 23 → x = 20 dulces.',tag:'PAQUETES'},
+      {q:'Cuatro paquetes idénticos contienen la misma cantidad de dulces y 3 caramelos extra cada uno. En total hay 92 piezas. ¿Cuántos dulces contiene cada paquete sin contar los caramelos extra?',eq:'4(x+3)=92',x:20,meaning:'Dulces sin extras en cada paquete',wrong:['Número de paquetes','Total de piezas'],hint:'Cada paquete contiene x+3, y hay cuatro paquetes.',why:'4(x + 3) = 92 → x + 3 = 23 → x = 20 dulces.',tag:'PAQUETES'},
       {q:'Cinco accesorios del mismo precio reciben un descuento total de $30 y pagas $175. ¿Cuál era el precio de cada accesorio?',eq:'5x-30=175',x:41,meaning:'Precio original de un accesorio (pesos)',wrong:['Descuento total','Número de accesorios'],hint:'El descuento aplica una sola vez al total.',why:'5x − 30 = 175 → 5x = 205 → x = 41 pesos.',tag:'DESCUENTOS'},
-      {q:'Tres amigos aportan cada uno x pesos, pero cada uno gasta $7 antes de juntar el dinero. Si reúnen $66, ¿cuánto tenía originalmente cada uno?',eq:'3(x-7)=66',x:29,meaning:'Dinero original de cada amigo (pesos)',wrong:['Gasto de cada amigo','Dinero reunido al final'],hint:'Cada persona aporta x−7; son tres personas.',why:'3(x − 7) = 66 → x − 7 = 22 → x = 29 pesos.',tag:'AMIGOS'},
+      {q:'Tres amigos tenían la misma cantidad de dinero. Cada uno gastó $7 y después juntaron lo que les quedaba. Si reunieron $66, ¿cuánto tenía cada uno al principio?',eq:'3(x-7)=66',x:29,meaning:'Dinero original de cada amigo (pesos)',wrong:['Gasto de cada amigo','Dinero reunido al final'],hint:'Cada persona aporta x−7; son tres personas.',why:'3(x − 7) = 66 → x − 7 = 22 → x = 29 pesos.',tag:'AMIGOS'},
       {q:'Dos juegos del mismo precio y una recarga adicional de $18 cuestan $104. ¿Cuánto cuesta un juego?',eq:'2x+18=104',x:43,meaning:'Precio de un juego (pesos)',wrong:['Costo de la recarga','Número de juegos'],hint:'La recarga se suma solo una vez.',why:'2x + 18 = 104 → 2x = 86 → x = 43 pesos.',tag:'VIDEOJUEGOS'},
       {q:'La cuarta parte de la cantidad de puntos que tenías, más 5 puntos extra, da 21. ¿Cuántos puntos tenías al inicio?',eq:'x/4+5=21',x:64,meaning:'Puntos iniciales',wrong:['Puntos extra','Puntos después de la operación'],hint:'La cuarta parte es x/4.',why:'x/4 + 5 = 21 → x/4 = 16 → x = 64 puntos.',tag:'PUNTAJE'}
     ],
@@ -259,26 +287,41 @@
   }
   $('m2-practice-check').addEventListener('click',()=>{
     const p=currentPractice(),eq=$('m2-practice-eq').value,x=$('m2-practice-x').value,verify=$('m2-practice-verify').value;
-    const meaningOK=$('m2-practice-meaning').value===p.meaning,eqOK=eqModelMatch(eq,p.eq),xOK=solutionMatch(x,p.x);
-    let verifyValue=NaN;
-    try{verifyValue=parseLinear(verify).b;}catch(e){}
-    const [a]=parseEquation(p.eq),expectedCheck=a.a*p.x+a.b;
-    // La comprobación debe ser numérica, no una expresión con x.
-    const verifyOK=/^\s*-?(?:\d+(?:[.,]\d*)?|[.,]\d+)\s*$/.test(verify)&&approx(Number(verify.replace(',','.')),expectedCheck);
+    const meaningOK = $('m2-practice-meaning').value === p.meaning;
+    const eqOK = eqModelMatch(eq, p.eq);
+    const valor = leerNumero(sinPrefijoX(x));
+    const xOK = coincideNumero(valor, p.x);
+    const check = leerNumero(verify);
+    let verifyOK = false;
+    if (eqOK && xOK && check !== null) {
+      const [left, right] = sustituirEnEcuacionLineal(eq, valor);
+      verifyOK = iguales(check, left) && iguales(check, right);
+    }
     attempts++;
     if(attempts>=2){$('m2-practice-solution').disabled=false;$('m2-practice-solution').textContent='Ver solución razonada';}
     const steps=[
       [meaningOK?'Identificaste correctamente qué representa x.':'Revisa el significado de x según lo que pregunta la historia.',meaningOK],
       [eqOK?'Tu ecuación modela la situación.':'La ecuación debe comparar exactamente las cantidades del enunciado, antes de resolver.',eqOK],
       [xOK?'El valor de x es correcto.':'El despeje aún no es correcto. Sustituye el valor obtenido en la igualdad.',xOK],
-      [verifyOK?'La comprobación numérica coincide en ambos miembros.':'Calcula cuánto vale cada miembro de la ecuación original al sustituir x.',verifyOK]
+      [verifyOK ? 'La comprobación numérica coincide en ambos miembros.' :
+        eqOK && xOK ? 'Sustituye tu valor de x en ambos miembros y escribe el valor común.' :
+          'Revisa la ecuación y el valor de x antes de comprobarlos.', verifyOK]
     ];
     const all=meaningOK&&eqOK&&xOK&&verifyOK;
     if(all)steps.push([p.why,true]);
     practiceFeedback(all?'¡Excelente! Modelaste, resolviste y verificaste.':'Revisa tu procedimiento: '+[meaningOK,eqOK,xOK,verifyOK].filter(Boolean).length+'/4 pasos correctos.',steps,all);
   });
   $('m2-practice-hint').addEventListener('click',()=>{const p=currentPractice();practiceFeedback('💡 Pista para construir el modelo',[[p.hint,true],['Primero interpreta qué representa x; luego escribe la igualdad de los datos.',true]],false);});
-  $('m2-practice-solution').addEventListener('click',()=>{if(attempts<2)return;const p=currentPractice();const left=parseEquation(p.eq)[0];practiceFeedback('Resolución razonada',[[p.why,true],['Ecuación: '+p.eq+'. Valor: x = '+nfmt(p.x)+'.',true],['Comprobación: ambos miembros valen '+nfmt(left.a*p.x+left.b)+'.',true],['En este caso, x representa: '+p.meaning+'.',true]],true);});
+  $('m2-practice-solution').addEventListener('click', () => {
+    if (attempts < 2) return;
+    const p = currentPractice();
+    const [common] = sustituirEnEcuacionLineal(p.eq, fraccionDeNumero(p.x));
+    practiceFeedback('Resolución razonada', [
+      [p.why, true],
+      ['Al sustituir x, ambos miembros valen ' + fmtFraccion(common) + '.', true],
+      ['Significado de x: ' + p.meaning + '.', true]
+    ], true);
+  });
   $('m2-practice-next').addEventListener('click', () => {
     pindex = (pindex + 1) % practice[level].length;
     practiceRender();
@@ -301,6 +344,7 @@
     {type:'model',q:'Juan tiene cierta cantidad de canicas. Le regalan siete y ahora tiene diecinueve. ¿Cuántas tenía al principio?',eq:'x+7=19',x:12,why:'x + 7 = 19; si restamos siete, x = 12 canicas.'}
   ];
   const storageKey='despejando-dudas-m2-evaluacion-v1';
+  const guardado = window.DespejandoProgreso.abrir(storageKey);
   const draft = readExamRecord().draft;
   const validDraft = Array.isArray(draft?.answers) && draft.answers.length === exam.length;
   let cursor = validDraft && Number.isInteger(draft.position) && draft.position >= 0 &&
@@ -316,16 +360,26 @@
     if (q.type === 'model' && typeof item?.eq === 'string') answer.eq = item.eq;
     return answer;
   });
-  const eString = item => item.type==='model'?item.eq+'; x = '+nfmt(item.x):item.type==='solve'?'x = '+nfmt(item.x):item.options[item.right];
-  const responseGiven=(i)=>{
-    const q=exam[i],a=answers[i];
-    return q.type==='mc'?a.choice!==undefined:q.type==='solve'?Boolean((a.x||'').trim()):Boolean((a.eq||'').trim())&&Boolean((a.x||'').trim());
-  };
+  const eString = item => item.type==='model'?item.eq+' · x = '+nfmt(item.x):item.type==='solve'?'x = '+nfmt(item.x):item.options[item.right];
+  function contarRespuestas() {
+    const cuenta = {completas: 0, parciales: 0, vacias: 0};
+    exam.forEach((question, index) => {
+      const answer = answers[index];
+      const hasSolution = Boolean(sinPrefijoX(answer.x));
+      const partes = question.type === 'mc' ? [answer.choice !== undefined] :
+        question.type === 'solve' ? [hasSolution] : [Boolean(answer.eq?.trim()), hasSolution];
+      if (partes.every(Boolean)) cuenta.completas++;
+      else if (partes.some(Boolean)) cuenta.parciales++;
+      else cuenta.vacias++;
+    });
+    return cuenta;
+  }
   function updateAnswerCount() {
-    const count = answers.filter((answer, index) => responseGiven(index)).length;
-    $('m2-test-answered').textContent = count + ' de ' + exam.length + ' respondidas';
-    $('m2-test-progress').setAttribute('aria-valuenow', String(count));
-    $('m2-test-fill').style.width = (100 * count / exam.length) + '%';
+    const {completas, parciales} = contarRespuestas();
+    $('m2-test-answered').textContent = completas + ' de ' + exam.length + ' completas' +
+      (parciales ? ' · ' + parciales + (parciales === 1 ? ' parcial' : ' parciales') : '');
+    $('m2-test-progress').setAttribute('aria-valuenow', String(completas));
+    $('m2-test-fill').style.width = (100 * completas / exam.length) + '%';
   }
   function renderExam(){
     const q=exam[cursor],ans=answers[cursor];
@@ -372,30 +426,17 @@
     return (eqModelMatch(a.eq,q.eq)?.5:0)+(solutionMatch(a.x,q.x)?.5:0);
   }
   function readExamRecord() {
-    try {
-      const record = JSON.parse(localStorage.getItem(storageKey));
-      if (record && typeof record === 'object' && !Array.isArray(record)) return record;
-    } catch (error) {}
-    return {};
-  }
-  function writeExamRecord(record) {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(record));
-    } catch (error) {
-      return false;
-    }
-    window.dispatchEvent(new CustomEvent('dd:progress'));
-    return true;
+    return guardado.leer() || {};
   }
   function saveDraft() {
     const record = readExamRecord();
     const hadDraft = Boolean(record.draft);
-    const hasDraft = cursor > 0 || answers.some(answer => answer.choice !== undefined ||
-      Boolean((answer.eq || '').trim()) || Boolean((answer.x || '').trim()));
+    const {completas, parciales} = contarRespuestas();
+    const hasDraft = cursor > 0 || completas > 0 || parciales > 0;
     if (!hadDraft && !hasDraft) return;
-    if (hasDraft) record.draft = {position: cursor, answers, updatedAt: Date.now()};
+    if (hasDraft) record.draft = {position: cursor, answers, respondidas: completas, updatedAt: Date.now()};
     else delete record.draft;
-    if (writeExamRecord(record) && hadDraft !== hasDraft) loadProgress(record);
+    if (guardado.guardar(record) && hadDraft !== hasDraft) loadProgress(record);
   }
   function saveGrade(score) {
     const record = readExamRecord();
@@ -403,7 +444,7 @@
     record.last = score;
     record.best = Number.isFinite(record.best) ? Math.max(score, record.best) : score;
     record.date = new Date().toISOString();
-    return writeExamRecord(record);
+    return guardado.guardar(record);
   }
   function textNode(tag,text,cls){const el=document.createElement(tag);el.textContent=text;if(cls)el.className=cls;return el;}
   function progressRender(score, best, hasDraft){
@@ -426,8 +467,13 @@
     progressRender(null, null, hasDraft);
   }
   function submitExam(){
-    const answered=answers.filter((a,i)=>responseGiven(i)).length;
-    if(answered<exam.length && !window.confirm('Has respondido '+answered+' de '+exam.length+' preguntas. Las demás valdrán cero. ¿Quieres entregar de todos modos?'))return;
+    const {completas, parciales, vacias} = contarRespuestas();
+    if (completas < exam.length) {
+      const parcial = parciales === 1 ? '1 parcial' : parciales + ' parciales';
+      const mensaje = 'Tienes ' + completas + ' de ' + exam.length + ' preguntas completas, ' +
+        parcial + ' y ' + vacias + ' en blanco. Las partes sin responder valen cero. ¿Quieres entregar?';
+      if (!window.confirm(mensaje)) return;
+    }
     const total=exam.reduce((score,q,i)=>score+questionScore(q,answers[i]),0);
     const saved=saveGrade(total);loadProgress();
     $('m2-exam-stage').hidden=true;
@@ -443,8 +489,11 @@
       box.append(textNode('strong','Pregunta '+(i+1)+' · '+nfmt(score)+' / 1 punto'),textNode('p',q.q));
       let user='Sin responder';
       if(q.type==='mc' && a.choice!==undefined)user=q.options[a.choice];
-      if(q.type==='solve' && a.x)user='x = '+a.x;
-      if(q.type==='model' && (a.eq||a.x))user=(a.eq||'Sin ecuación')+'; x = '+(a.x||'sin solución');
+      const valor = sinPrefijoX(a.x);
+      if (q.type === 'solve' && valor) user = 'x = ' + valor;
+      if (q.type === 'model' && (a.eq?.trim() || valor)) {
+        user = [a.eq?.trim() || 'Sin ecuación', valor ? 'x = ' + valor : 'Sin solución'].join(' · ');
+      }
       box.append(textNode('p','Tu respuesta: '+user),textNode('p','Respuesta esperada: '+eString(q)),textNode('p','Explicación: '+q.why));
       reviews.append(box);
     });

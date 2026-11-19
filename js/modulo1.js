@@ -3,6 +3,7 @@
     'use strict';
     const el = id => document.getElementById(id);
     const storageKey = 'despejando-dudas-m1-evaluacion-v1';
+    const guardado = window.DespejandoProgreso.abrir(storageKey);
     function equivalent(given, expected) {
       return window.DespejandoAlgebra.equivalentes(given, expected);
     }
@@ -22,17 +23,17 @@
         {q:'La quinta parte de la suma de un número y diez.',a:'(x+10)/5',hint:'Suma antes de dividir.',why:'Divides toda la suma (x + 10) entre 5.'},
         {q:'El doble de un número y después agregas once.',a:'2x+11',hint:'No multipliques el once por dos.',why:'Solo x se duplica: 2x + 11.'},
         {q:'Luis tiene x años. Ana tiene cuatro años más que Luis.',a:'x+4',hint:'La edad de Luis es la base.',why:'La edad de Ana es x + 4.'},
-        {q:'La suma del triple de un número y otro número diferente.',a:'3x+y',hint:'Usa x y y para representar dos números distintos.',why:'El triple del primero es 3x, luego sumamos y.'},
+        {q:'Al triple del número x, súmale el número y.',a:'3x+y',hint:'Multiplica x por tres y luego suma y.',why:'El triple de x es 3x, luego sumamos y.'},
         {q:'Cuatro menos que la mitad de un número.',a:'x/2-4',hint:'Primero calcula la mitad de x y después resta cuatro.',why:'«Cuatro menos que» indica quitar cuatro de x/2.'}
       ],
       reto:[
-        {q:'Cada entrada al cine cuesta x pesos. Compras cuatro entradas y pagas una sola comisión de 20 pesos.',a:'4x+20',hint:'La comisión se cobra una sola vez, no cuatro.',why:'Las entradas suman 4x y la comisión añade 20.'},
+        {q:'Cada entrada al cine cuesta x pesos. Compras cuatro entradas y pagas una sola comisión de 20 pesos. ¿Cuánto pagas en total?',a:'4x+20',hint:'La comisión se cobra una sola vez, no cuatro.',why:'Las entradas suman 4x y la comisión añade 20.'},
         {q:'Compras tres cuadernos de x pesos cada uno y dos lápices de y pesos cada uno.',a:'3x+2y',hint:'Usa una letra para cada precio.',why:'Tres cuadernos cuestan 3x y dos lápices 2y; se suman.'},
         {q:'Dos hermanos tienen x canicas cada uno. Cada hermano regala tres canicas. ¿Cuántas les quedan entre los dos?',a:'2(x-3)',hint:'Cada hermano conserva x − 3.',why:'Los dos conservan 2(x − 3) canicas en total.'},
-        {q:'Recorres x kilómetros diarios durante cinco días y luego doce kilómetros más.',a:'5x+12',hint:'Cinco recorridos de x kilómetros y un recorrido adicional.',why:'Cinco días son 5x kilómetros; sumamos 12.'},
+        {q:'Recorres x kilómetros diarios durante cinco días y luego doce kilómetros más. ¿Cuántos kilómetros recorriste en total?',a:'5x+12',hint:'Cinco recorridos de x kilómetros y un recorrido adicional.',why:'Cinco días son 5x kilómetros; sumamos 12.'},
         {q:'La mitad de la diferencia entre el triple de un número y cuatro.',a:'(3x-4)/2',hint:'A la cantidad 3x − 4 divídela entre 2.',why:'Primero restamos cuatro al triple; luego tomamos la mitad.'},
         {q:'Un rectángulo mide x unidades de alto y x + 2 unidades de ancho. ¿Cuál es su área?',a:'x(x+2)',hint:'Área = alto multiplicado por ancho.',why:'Multiplicamos x por (x + 2).'},
-        {q:'Tienes dos bolsas con x + 5 fichas en cada una y luego regalas tres fichas en total.',a:'2(x+5)-3',hint:'Dos bolsas iguales, y las tres fichas se quitan solo una vez.',why:'Las dos bolsas contienen 2(x + 5) fichas; restamos 3.'}
+        {q:'Tienes dos bolsas con x + 5 fichas en cada una y luego regalas tres fichas en total. ¿Cuántas fichas te quedan?',a:'2(x+5)-3',hint:'Dos bolsas iguales, y las tres fichas se quitan solo una vez.',why:'Las dos bolsas contienen 2(x + 5) fichas; restamos 3.'}
       ]
     };
     let level='basico',current=null,last=-1,solved=0,attempts=0,solvedCurrent=false;
@@ -146,25 +147,12 @@
     el('m1-test-prev').addEventListener('click',()=>{if(examIndex>0)go(examIndex-1);});
     el('m1-test-next').addEventListener('click',()=>{if(examIndex<exam.length-1)go(examIndex+1);});
     function readExamRecord() {
-      try {
-        const saved = JSON.parse(localStorage.getItem(storageKey));
-        if (saved && typeof saved === 'object' && !Array.isArray(saved)) return saved;
-      } catch (error) {}
-      return {};
+      return guardado.leer() || {};
     }
     function readResult(saved = readExamRecord()) {
       if (Number.isInteger(saved.last) && Number.isInteger(saved.best) &&
           saved.last >= 0 && saved.last <= 10 && saved.best >= saved.last && saved.best <= 10) return saved;
       return null;
-    }
-    function writeExamRecord(record) {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(record));
-      } catch (error) {
-        return false;
-      }
-      window.dispatchEvent(new CustomEvent('dd:progress'));
-      return true;
     }
     function saveDraft() {
       const record = readExamRecord();
@@ -173,7 +161,7 @@
       if (!hadDraft && !hasDraft) return;
       if (hasDraft) record.draft = {position: examIndex, answers, updatedAt: Date.now()};
       else delete record.draft;
-      if (writeExamRecord(record) && hadDraft !== hasDraft) renderProgress(readResult(record), hasDraft);
+      if (guardado.guardar(record) && hadDraft !== hasDraft) renderProgress(readResult(record), hasDraft);
     }
     function storeResult(score) {
       const record = readExamRecord();
@@ -182,7 +170,7 @@
       record.last = score;
       record.best = Math.max(score, previous?.best || 0);
       record.date = new Date().toISOString();
-      return writeExamRecord(record);
+      return guardado.guardar(record);
     }
     function renderProgress(result, hasDraft = Boolean(readExamRecord().draft)){
       const target=el('m1-progress-summary');target.replaceChildren();
